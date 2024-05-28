@@ -6,19 +6,24 @@ import pandas as pd
 from datetime import date, timedelta
 from pandas.tseries.offsets import BDay
 from pandas import json_normalize
+import math
 
 
 class DMPonline:
-    url = 'https://dmponline.dcc.ac.uk/api/'
+    url = None
     token = None
 
-    def __init__(self, token, token_user=None, verify=True):
+    def __init__(self, token, url=None, token_user=None, verify=True):
         self.token = token
         self.verify = verify
         if token_user:
             self.bearer_token = self.get_bearer_token(token_user)
         else:
             logging.warning('api v1 not available, because token_user is not provided')
+        if url:
+            self.url = url
+        else:
+            self.url = 'https://dmponline.dcc.ac.uk/api/'
 
     def get_bearer_token(self, token_user):
         headers = {'Accept': 'application/json',
@@ -47,7 +52,7 @@ class DMPonline:
         yesterday = date.today() - timedelta(days=1)
         return yesterday.strftime('%Y-%m-%d')
 
-    def get(self, request='v0/statistics/plans', params=dict(remove_tests='true')):
+    def get(self, request='v0/statistics/plans', params=dict(remove_tests='true'), raw = None):
         """
         get call to DMPonline API
         :param request: request string (excluding https://.../api/)
@@ -71,8 +76,11 @@ class DMPonline:
 
         if r.status_code == 200:
             json_text = r.text
-            data = json.loads(json_text)
-            return data
+            if raw:
+                return r
+            else:
+                data = json.loads(json_text)
+                return data
         else:
             logging.error('{} gives status code {}\n{}'.format(url, r.status_code, r.text))
             return None
@@ -96,7 +104,7 @@ class DMPonline:
 
         return df
 
-    def get_plan_v0(self, plan_id):
+    def get_plan_v0(self, plan_id, raw = None):
         """
         Retreive plan from API v0
         :param plan_id: plan id integer
@@ -107,13 +115,16 @@ class DMPonline:
         data = self.get(request=request, params={'remove_tests': 'false'})
         if data == [] or data is None:
             return None
-        df = json_normalize(data)
-        df.creation_date = pd.to_datetime(df.creation_date)
-        df.last_updated = pd.to_datetime(df.last_updated)
-        df.rename(columns={'principal_investigator.email': 'email_pi'}, inplace=True)
-        df.users = df.users.apply(lambda x: self.process_users(x, key='email'))
+        if raw:
+            return data
+        else:
+            df = json_normalize(data)
+            df.creation_date = pd.to_datetime(df.creation_date)
+            df.last_updated = pd.to_datetime(df.last_updated)
+            df.rename(columns={'principal_investigator.email': 'email_pi'}, inplace=True)
+            df.users = df.users.apply(lambda x: self.process_users(x, key='email'))
 
-        return df
+            return df
 
     def get_plan_v1(self, plan_id):
         """
@@ -196,6 +207,31 @@ class DMPonline:
         df = pd.concat(df_list)
         return df
 
+    
+    def get_plans(self, params = None, raw = None):
+        """
+        Get all DMPs
+        :param raw: Whether to return raw JSON
+        :return: JSON or Pandas dataframe
+        """
+        page_count = math.ceil(self.dmp_count() / 100)
+        responses = []
+        request = 'v0/plans'
+        current_page = 1
+        params["per_page"] = 100
+        while True:
+            if current_page > page_count:
+                break
+            params["page"] = current_page
+            data = self.get(request=request, params=params)
+            if data is None:
+                return None
+            responses = responses + data
+            current_page+=1
+        return {"plans": responses}
+            
+
+    
     def has_personal_data(self, plan_id, verbose=False):
         """
         Determine whether personal data is associated to the DMP
