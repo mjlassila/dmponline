@@ -30,7 +30,7 @@ question_overview -i DMPONLINE_PLAN_ID -t <YOUR-DMPONLINE-API-TOKEN>
 
 ## Retrieving structured DMP:s
 
-If your organization has enabled [question id feature for DMPOnline](https://www.youtube.com/watch?v=ihu9Bv8qN-M) for templates you can retrieve structured DMP:s using the following script snippet. Remember to modify the template ID.
+If your organization has enabled [question id feature for DMPOnline](https://www.youtube.com/watch?v=ihu9Bv8qN-M) for templates you can retrieve structured DMP:s using the following script snippet. Remember to modify the template ID
 
 ```python
 from src import dmponline
@@ -47,10 +47,19 @@ for plan in plans['plans']:
             'id':plan['id'],
             'title':plan['title'],
             'last_updated':plan['last_updated'],
-            'created':plan['creation_date'],
-            'grant_number':plan.get("grant_number")
+            'created':plan['creation_date']
             }
-        
+        if plan.get("principal_investigator"):
+            dmp["principal_investigator"] = plan.get("principal_investigator")
+        if plan.get("data_contact"):
+            dmp["data_contact"] = plan.get("data_contact")
+        if plan.get("users"):
+            dmp["users"] = plan.get("users")
+        if plan.get("grant_number"):
+            dmp["grant_number"] = plan.get("grant_number")
+        if plan.get("funder"):
+            dmp["funder"] = plan.get("funder")
+            
         question_data = {}
         for section in content['sections']:
     
@@ -74,5 +83,7 @@ for plan in plans['plans']:
     if question_data:
         with open(str(plan['id'])+".json", "w") as outfile: 
             json.dump(dmp, outfile,indent=2)
+                    
+
 
 ```
